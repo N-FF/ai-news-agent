@@ -1,4 +1,5 @@
 """数据库初始化脚本：建表 + 插入测试数据"""
+import config
 import db.database as db
 
 if __name__ == "__main__":

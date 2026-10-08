@@ -15,7 +15,7 @@ def get_conn():
 
 def init_db():
     """执行 schema.sql 建表"""
-    schema_path = os.path_join("schema.sql")
+    schema_path = os_path_join("schema.sql")
     with open(schema_path, "r", encoding="utf-8") as f:
         sql = f.read()
     conn = get_conn()
