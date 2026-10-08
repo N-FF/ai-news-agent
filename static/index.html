@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日AI新闻助手</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container mt-5" style="max-width: 800px;">
+  <h2 class="mb-4">📰 每日AI新闻助手 Agent</h2>
+
+  <!-- 1. 身份 -->
+  <div class="card mb-3">
+    <div class="card-header">1. 填写你的身份</div>
+    <div class="card-body">
+      <div class="row g-2">
+        <div class="col-md-4"><input id="name" class="form-control" placeholder="你的名字"></div>
+        <div class="col-md-6"><input id="email" class="form-control" placeholder="你的邮箱（接收简报）"></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100" onclick="createUser()">注册/登录</button></div>
+      </div>
+      <div id="userInfo" class="mt-2 text-success"></div>
+    </div>
+  </div>
+
+  <!-- 2. 订阅偏好 -->
+  <div class="card mb-3">
+    <div class="card-header">2. 设置订阅偏好</div>
+    <div class="card-body">
+      <div class="row g-2">
+        <div class="col-md-4"><input id="topic" class="form-control" placeholder="关注话题，如：大模型"></div>
+        <div class="col-md-4"><input id="keyword" class="form-control" placeholder="额外关键词（可选）"></div>
+        <div class="col-md-2"><button class="btn btn-success w-100" onclick="addSub()">添加</button></div>
+      </div>
+      <ul id="subList" class="mt-3 list-group"></ul>
+    </div>
+  </div>
+
+  <!-- 3. 触发 & 历史 -->
+  <div class="card mb-3">
+    <div class="card-header">3. 生成简报</div>
+    <div class="card-body">
+      <button class="btn btn-warning" onclick="triggerNow()">🚀 立即生成今日简报</button>
+      <button class="btn btn-outline-secondary" onclick="loadHistory()">查看历史简报</button>
+      <div id="result" class="mt-3"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">历史简报</div>
+    <div class="card-body">
+      <div id="historyList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentUser = null;
+
+async function api(path, method="GET", body=null) {
+  const opts = {method, headers: {"Content-Type": "application/json"}};
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+async function createUser() {
+  const name = document.getElementById("name").value.trim();
+  const email = document.getElementById("email").value.trim();
+  if (!name || !email) return alert("请填写名字和邮箱");
+  const r = await api("/api/users", "POST", {name, email});
+  currentUser = r.user;
+  document.getElementById("userInfo").innerText = `已登录：${currentUser.name} (${currentUser.email})`;
+  loadSubs();
+}
+
+async function addSub() {
+  if (!currentUser) return alert("请先注册/登录");
+  const topic = document.getElementById("topic").value.trim();
+  const keyword = document.getElementById("keyword").value.trim();
+  if (!topic) return alert("请填话题");
+  await api("/api/subscriptions", "POST", {user_email: currentUser.email, topic, keyword});
+  document.getElementById("topic").value = "";
+  document.getElementById("keyword").value = "";
+  loadSubs();
+}
+
+async function loadSubs() {
+  const r = await api(`/api/users/${currentUser.email}`);
+  const ul = document.getElementById("subList");
+  ul.innerHTML = "";
+  r.subscriptions.forEach(s => {
+    const li = document.createElement("li");
+    li.className = "list-group-item d-flex justify-content-between";
+    li.innerHTML = `<span>${s.topic} <small class="text-muted">${s.keyword||""}</small></span>
+                    <button class="btn btn-sm btn-outline-danger" onclick="delSub(${s.id})">删除</button>`;
+    ul.appendChild(li);
+  });
+}
+
+async function delSub(id) {
+  await api(`/api/subscriptions/${id}`, "DELETE");
+  loadSubs();
+}
+
+async function triggerNow() {
+  if (!currentUser) return alert("请先注册/登录");
+  document.getElementById("result").innerHTML = "<div class='text-info'>Agent 正在工作中，请耐心等待 1-2 分钟...</div>";
+  const r = await api("/api/trigger", "POST", {user_email: currentUser.email});
+  document.getElementById("result").innerHTML = `<pre class="bg-light p-3">${r.output||r.msg}</pre>`;
+}
+
+async function loadHistory() {
+  if (!currentUser) return alert("请先注册/登录");
+  const r = await api(`/api/briefings/${currentUser.email}`);
+  const div = document.getElementById("historyList");
+  div.innerHTML = "";
+  r.briefings.forEach(b => {
+    div.innerHTML += `<div class="border p-2 mb-2"><b>${b.date}</b><pre>${b.content.slice(0,500)}...</pre></div>`;
+  });
+}
+</script>
+</body>
+</html>

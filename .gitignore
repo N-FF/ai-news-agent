@@ -1,0 +1,26 @@
+# 环境变量（含密钥，绝不能提交）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# 数据库文件
+data/*.db
+data/*.sqlite
+
+# 编辑器
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+logs/
