@@ -1,7 +1,7 @@
 """FastAPI 路由：用户注册、订阅偏好、历史简报、手动触发"""
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import db.database as db
 from agent.loop import generate_daily_briefing_for_user
 
@@ -22,6 +22,10 @@ class SubscriptionCreate(BaseModel):
 
 class TriggerRequest(BaseModel):
     user_email: str
+
+
+class ScheduleUpdate(BaseModel):
+    daily_send_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 # ============ 页面 ============
@@ -48,6 +52,17 @@ def get_user(email: str):
         return {"code": 1, "msg": "用户不存在"}
     subs = db.get_subscriptions(user["id"])
     return {"code": 0, "user": user, "subscriptions": subs}
+
+
+@router.put("/api/users/{email}/schedule")
+def update_user_schedule(email: str, body: ScheduleUpdate):
+    if not db.update_daily_send_time(email, body.daily_send_time):
+        return {"code": 1, "msg": "用户不存在"}
+    return {
+        "code": 0,
+        "msg": f"每日推送时间已设置为 {body.daily_send_time}",
+        "daily_send_time": body.daily_send_time,
+    }
 
 
 # ============ API：订阅 ============
@@ -87,7 +102,8 @@ def trigger_now(body: TriggerRequest):
     if not subs:
         return {"code": 1, "msg": "请先设置订阅偏好"}
     # 跑 Agent
-    output = generate_daily_briefing_for_user(user, subs)
+    result = generate_daily_briefing_for_user(user, subs)
+    output = result["final_output"]
     # 存库
     db.save_briefing(
         user_id=user["id"],
@@ -95,4 +111,16 @@ def trigger_now(body: TriggerRequest):
         content=output,
         news_count=0,
     )
-    return {"code": 0, "msg": "简报已生成并推送", "output": output}
+    if result["email_sent"]:
+        message = "简报已生成并成功发送"
+    elif result["email_attempted"]:
+        message = f"简报已生成，但邮件未发送成功：{result['email_status']}"
+    else:
+        message = "简报已生成，但 Agent 未调用邮件发送工具"
+    return {
+        "code": 0,
+        "msg": message,
+        "output": output,
+        "email_sent": result["email_sent"],
+        "email_status": result["email_status"],
+    }

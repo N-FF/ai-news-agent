@@ -18,10 +18,13 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.qq.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 
+# 任意 Shell 命令执行有较高风险，默认关闭；仅可信本地演示环境显式开启
+ENABLE_BASH_TOOL = os.getenv("ENABLE_BASH_TOOL", "false").strip().lower() in {
+	"1", "true", "yes", "on"
+}
+
 # 服务
 PORT = int(os.getenv("PORT", "8000"))
-DAILY_RUN_HOUR = int(os.getenv("DAILY_RUN_HOUR", "9"))
-DAILY_RUN_MINUTE = int(os.getenv("DAILY_RUN_MINUTE", "0"))
 
 # RSS源
 RSS_FEEDS = [u.strip() for u in os.getenv("RSS_FEEDS", "").split(",") if u.strip()]

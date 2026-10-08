@@ -41,6 +41,8 @@ python main.py
 ```
 打开浏览器访问 http://localhost:8000
 
+登录后可在页面设置个人每日推送时间。系统按**运行服务器的本地时区**检查设置；旧数据库中的用户默认时间为 09:00。
+
 ---
 
 ## 项目结构
@@ -62,7 +64,7 @@ ai-news-agent/
 ├── db/
 │   └── database.py     # SQLite操作
 ├── scheduler/
-│   └── tasks.py        # APScheduler每天定时跑
+│   └── tasks.py        # APScheduler每分钟检查各用户的推送时间
 ├── static/
 │   └── index.html      # 简单前端页面
 └── data/               # SQLite数据库文件

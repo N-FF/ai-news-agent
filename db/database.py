@@ -1,5 +1,4 @@
 """SQLite 数据库操作封装"""
-import os
 import sqlite3
 from datetime import datetime
 from typing import Optional
@@ -19,9 +18,16 @@ def init_db():
     with open(schema_path, "r", encoding="utf-8") as f:
         sql = f.read()
     conn = get_conn()
-    conn.executescript(sql)
-    conn.commit()
-    conn.close()
+    try:
+        conn.executescript(sql)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+        if "daily_send_time" not in columns:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN daily_send_time TEXT NOT NULL DEFAULT '09:00'"
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def os_path_join(*parts):
@@ -53,6 +59,38 @@ def get_user(user_id: int) -> Optional[dict]:
     row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def update_daily_send_time(email: str, daily_send_time: str) -> bool:
+    conn = get_conn()
+    try:
+        cur = conn.execute(
+            "UPDATE users SET daily_send_time = ? WHERE email = ?",
+            (daily_send_time, email),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def get_users_scheduled_for_time(daily_send_time: str) -> list:
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT users.* FROM users
+            WHERE users.daily_send_time = ?
+              AND EXISTS (
+                  SELECT 1 FROM subscriptions
+                  WHERE subscriptions.user_id = users.id
+              )
+            """,
+            (daily_send_time,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
 
 
 # ============ 订阅偏好 ============

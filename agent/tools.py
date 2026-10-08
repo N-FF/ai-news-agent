@@ -5,6 +5,7 @@ Agent 工具集：定义 8 个工具的 JSON Schema + 实际执行函数
 import os
 import subprocess
 import sqlite3
+from pathlib import Path
 import feedparser
 from tavily import TavilyClient
 import smtplib
@@ -82,7 +83,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "bash",
-            "description": "执行一条 shell 命令并返回输出结果",
+            "description": "执行 shell 命令；仅在可信本地环境显式设置 ENABLE_BASH_TOOL=true 后可用",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -143,29 +144,39 @@ TOOLS_SCHEMA = [
 # 2. 工具的实际执行函数
 # ===========================================
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_project_path(path: str) -> Path:
+    requested = Path(path)
+    target = (requested if requested.is_absolute() else PROJECT_ROOT / requested).resolve()
+    try:
+        target.relative_to(PROJECT_ROOT)
+    except ValueError as exc:
+        raise ValueError("文件工具仅允许访问项目目录中的路径") from exc
+    return target
 
 
 def _list_dir(path: str) -> str:
-    target = path if os.path.isabs(path) else os.path.join(PROJECT_ROOT, path)
-    if not os.path.isdir(target):
+    target = _resolve_project_path(path)
+    if not target.is_dir():
         return f"错误：目录不存在 {target}"
     items = os.listdir(target)
     return f"目录 {target} 内容（共{len(items)}项）：\n" + "\n".join(items)
 
 
 def _read_file(path: str) -> str:
-    target = path if os.path.isabs(path) else os.path.join(PROJECT_ROOT, path)
-    if not os.path.isfile(target):
+    target = _resolve_project_path(path)
+    if not target.is_file():
         return f"错误：文件不存在 {target}"
     with open(target, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
     return content[:5000]  # 截断防止超长
 
 
-def _search_content(keyword: str, dir_path: str) -> str:
-    target_dir = dir_path if os.path.isabs(dir_path) else os.path.join(PROJECT_ROOT, dir_path)
-    if not os.path.isdir(target_dir):
+def _search_content(keyword: str, dir: str) -> str:
+    target_dir = _resolve_project_path(dir)
+    if not target_dir.is_dir():
         return f"错误：目录不存在 {target_dir}"
     results = []
     for root, _, files in os.walk(target_dir):
@@ -184,14 +195,16 @@ def _search_content(keyword: str, dir_path: str) -> str:
 
 
 def _write_file(path: str, content: str) -> str:
-    target = path if os.path.isabs(path) else os.path.join(PROJECT_ROOT, path)
-    os.makedirs(os.path.dirname(target), exist_ok=True)
+    target = _resolve_project_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
     with open(target, "w", encoding="utf-8") as f:
         f.write(content)
     return f"已写入文件 {target}（{len(content)} 字符）"
 
 
 def _bash(command: str) -> str:
+    if not config.ENABLE_BASH_TOOL:
+        return "bash 工具默认禁用；仅在可信本地环境于 .env 中设置 ENABLE_BASH_TOOL=true 后启用。"
     try:
         result = subprocess.run(
             command, shell=True, capture_output=True, text=True, timeout=30,

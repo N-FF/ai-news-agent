@@ -41,6 +41,9 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
 
     steps = []
     tool_calls_count = 0
+    email_attempted = False
+    email_sent = False
+    email_status = "Agent 未调用邮件发送工具"
 
     for step in range(max_steps):
         # 调 LLM，带上工具列表
@@ -61,6 +64,9 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
                 "final_output": ai_message.content or "",
                 "steps": steps,
                 "tool_calls_count": tool_calls_count,
+                "email_attempted": email_attempted,
+                "email_sent": email_sent,
+                "email_status": email_status,
             }
 
         # 依次执行 LLM 要求的每个工具调用
@@ -74,6 +80,11 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
             print(f"[Step {step+1}] 调用工具: {tool_name} | 参数: {tool_args}")
             result = execute_tool(tool_name, tool_args)
             tool_calls_count += 1
+            if tool_name == "send_email":
+                email_attempted = True
+                email_status = result
+                if result.startswith("邮件已发送至 "):
+                    email_sent = True
             steps.append({"tool": tool_name, "args": tool_args, "result_preview": result[:300]})
 
             # 把工具结果作为 tool 角色消息塞回上下文
@@ -89,10 +100,13 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
         "final_output": "（达到最大步数限制，任务强制结束）",
         "steps": steps,
         "tool_calls_count": tool_calls_count,
+        "email_attempted": email_attempted,
+        "email_sent": email_sent,
+        "email_status": email_status,
     }
 
 
-def generate_daily_briefing_for_user(user: dict, subscriptions: list) -> str:
+def generate_daily_briefing_for_user(user: dict, subscriptions: list) -> dict:
     """
     为某个用户生成今日简报。
     user: {id, name, email}
@@ -114,4 +128,4 @@ def generate_daily_briefing_for_user(user: dict, subscriptions: list) -> str:
 5. 最后发送邮件到 {user['email']}
 """
     result = run_agent(query)
-    return result["final_output"]
+    return result

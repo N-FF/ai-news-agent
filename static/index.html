@@ -36,9 +36,26 @@
     </div>
   </div>
 
-  <!-- 3. 触发 & 历史 -->
+  <!-- 3. 定时推送设置 -->
   <div class="card mb-3">
-    <div class="card-header">3. 生成简报</div>
+    <div class="card-header">3. 设置每日推送时间</div>
+    <div class="card-body">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-4">
+          <input id="dailySendTime" type="time" class="form-control" value="09:00">
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-outline-primary w-100" onclick="saveSchedule()">保存推送时间</button>
+        </div>
+        <div class="col-md-5 text-muted small">按服务器本地时间执行；每天为有订阅的话题生成并发送简报。</div>
+      </div>
+      <div id="scheduleInfo" class="mt-2" role="status"></div>
+    </div>
+  </div>
+
+  <!-- 4. 触发 & 历史 -->
+  <div class="card mb-3">
+    <div class="card-header">4. 生成简报</div>
     <div class="card-body">
       <button class="btn btn-warning" onclick="triggerNow()">🚀 立即生成今日简报</button>
       <button class="btn btn-outline-secondary" onclick="loadHistory()">查看历史简报</button>
@@ -87,6 +104,8 @@ async function addSub() {
 
 async function loadSubs() {
   const r = await api(`/api/users/${currentUser.email}`);
+  if (r.code !== 0) return alert(r.msg);
+  document.getElementById("dailySendTime").value = r.user.daily_send_time || "09:00";
   const ul = document.getElementById("subList");
   ul.innerHTML = "";
   r.subscriptions.forEach(s => {
@@ -98,6 +117,15 @@ async function loadSubs() {
   });
 }
 
+async function saveSchedule() {
+  if (!currentUser) return alert("请先注册/登录");
+  const daily_send_time = document.getElementById("dailySendTime").value;
+  const r = await api(`/api/users/${encodeURIComponent(currentUser.email)}/schedule`, "PUT", {daily_send_time});
+  const info = document.getElementById("scheduleInfo");
+  info.className = r.code === 0 ? "mt-2 text-success" : "mt-2 text-danger";
+  info.textContent = r.msg;
+}
+
 async function delSub(id) {
   await api(`/api/subscriptions/${id}`, "DELETE");
   loadSubs();
@@ -107,7 +135,14 @@ async function triggerNow() {
   if (!currentUser) return alert("请先注册/登录");
   document.getElementById("result").innerHTML = "<div class='text-info'>Agent 正在工作中，请耐心等待 1-2 分钟...</div>";
   const r = await api("/api/trigger", "POST", {user_email: currentUser.email});
-  document.getElementById("result").innerHTML = `<pre class="bg-light p-3">${r.output||r.msg}</pre>`;
+  const result = document.getElementById("result");
+  const status = document.createElement("div");
+  status.className = r.email_sent ? "text-success" : "text-warning";
+  status.textContent = r.msg;
+  const output = document.createElement("pre");
+  output.className = "bg-light p-3";
+  output.textContent = r.output || "";
+  result.replaceChildren(status, output);
 }
 
 async function loadHistory() {
