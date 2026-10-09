@@ -16,7 +16,7 @@ def daily_job(now: datetime | None = None):
     due_users = []
     for user in users:
         user_now = now.astimezone(ZoneInfo(user["timezone_name"]))
-        if user["daily_send_time"] == user_now.strftime("%H:%M"):
+        if user_now.strftime("%H:%M") == user["daily_send_time"]:
             due_users.append((user, user_now))
     if not due_users:
         return

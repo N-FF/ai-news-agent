@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS users (
     timezone_name TEXT NOT NULL DEFAULT 'Asia/Shanghai',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
 -- 订阅偏好表
 CREATE TABLE IF NOT EXISTS subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,3 +55,4 @@ CREATE TABLE IF NOT EXISTS email_deliveries (
     error_message TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+

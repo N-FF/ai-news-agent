@@ -92,7 +92,6 @@ async function createUser() {
   if (!name || !email) return alert("请填写名字和邮箱");
   const timezone_name = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
   const r = await api("/api/users", "POST", {name, email, timezone_name});
-  if (r.code !== 0) return alert(r.msg);
   currentUser = r.user;
   document.getElementById("userInfo").innerText = `已登录：${currentUser.name} (${currentUser.email})`;
   loadSubs();
@@ -146,7 +145,8 @@ async function saveSchedule() {
 }
 
 async function delSub(id) {
-  await api(`/api/subscriptions/${id}`, "DELETE");
+  try { await api(`/api/subscriptions/${id}`, "DELETE"); }
+  catch (error) { alert(error.message); }
   loadSubs();
 }
 
@@ -157,7 +157,15 @@ async function triggerNow() {
   loading.className = "text-info";
   loading.textContent = "Agent 正在工作中，请耐心等待 1-2 分钟...";
   result.replaceChildren(loading);
-  const r = await api("/api/trigger", "POST", {user_email: currentUser.email});
+  let r;
+  try { r = await api("/api/trigger", "POST", {user_email: currentUser.email}); }
+  catch (error) {
+    const status = document.createElement("div");
+    status.className = "text-danger";
+    status.textContent = error.message;
+    result.replaceChildren(status);
+    return;
+  }
   const status = document.createElement("div");
   status.className = r.email_sent ? "text-success" : "text-warning";
   status.textContent = r.msg;
@@ -169,7 +177,9 @@ async function triggerNow() {
 
 async function loadHistory() {
   if (!currentUser) return alert("请先注册/登录");
-  const r = await api(`/api/briefings/${currentUser.email}`);
+  let r;
+  try { r = await api(`/api/briefings/${currentUser.email}`); }
+  catch (error) { document.getElementById("historyList").textContent = error.message; return; }
   const div = document.getElementById("historyList");
   div.replaceChildren();
   if (r.code !== 0) {
@@ -192,6 +202,7 @@ async function loadHistory() {
     div.appendChild(item);
   });
 }
+
 </script>
 </body>
 </html>

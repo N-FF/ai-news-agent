@@ -42,10 +42,6 @@ def index():
 # ============ API：用户 ============
 @router.post("/api/users")
 def create_user(body: UserCreate):
-    try:
-        ZoneInfo(body.timezone_name)
-    except (ZoneInfoNotFoundError, ValueError):
-        return {"code": 1, "msg": "无效的时区，请选择有效的 IANA 时区"}
     existing = db.get_user_by_email(body.email)
     if existing:
         return {"code": 0, "msg": "用户已存在", "user": existing}

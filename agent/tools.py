@@ -3,9 +3,9 @@ Agent 工具集：定义 8 个工具的 JSON Schema + 实际执行函数
 题目要求至少5个文件/系统工具，这里额外加了3个业务工具（RSS、联网搜索、发邮件）
 """
 import os
-import subprocess
 import sqlite3
 import time
+import subprocess
 from pathlib import Path
 import feedparser
 from tavily import TavilyClient
@@ -327,7 +327,10 @@ TOOL_DISPATCH = {
 }
 
 
-def execute_tool(name: str, arguments: dict) -> str:
+def execute_tool(
+    name: str,
+    arguments: dict,
+) -> str:
     """根据工具名执行对应函数，返回字符串结果"""
     func = TOOL_DISPATCH.get(name)
     if func is None:

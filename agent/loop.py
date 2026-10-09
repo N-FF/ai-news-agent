@@ -29,7 +29,10 @@ SYSTEM_PROMPT = """你是一个「每日AI新闻助手 Agent」。
 """
 
 
-def run_agent(user_query: str, max_steps: int = 15) -> dict:
+def run_agent(
+    user_query: str,
+    max_steps: int = 15,
+) -> dict:
     """
     运行 Agent 循环。
     返回：{ "final_output": str, "steps": list, "tool_calls_count": int }

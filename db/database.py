@@ -65,8 +65,6 @@ def init_db():
         conn.commit()
     finally:
         conn.close()
-
-
 def os_path_join(*parts):
     import os
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), *parts)
@@ -271,3 +269,5 @@ def record_email_delivery(
         conn.commit()
     finally:
         conn.close()
+
+
