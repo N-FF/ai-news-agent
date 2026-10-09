@@ -117,20 +117,20 @@ def trigger_now(body: TriggerRequest):
     # 跑 Agent
     result = generate_daily_briefing_for_user(user, subs)
     output = result["final_output"]
-    # 存库
-    db.save_briefing(
-        user_id=user["id"],
-        title=f"今日AI新闻简报",
-        content=output,
-        news_count=0,
-        briefing_date=datetime.now(ZoneInfo(user["timezone_name"])).strftime("%Y-%m-%d"),
-    )
     if result["email_sent"]:
+        # 历史简报保存用户实际收到的邮件正文，不保存 Agent 工具调用过程总结。
+        db.save_briefing(
+            user_id=user["id"],
+            title="今日AI新闻简报",
+            content=result["email_body"],
+            news_count=0,
+            briefing_date=datetime.now(ZoneInfo(user["timezone_name"])).strftime("%Y-%m-%d"),
+        )
         message = "简报已生成并成功发送"
     elif result["email_attempted"]:
-        message = f"简报已生成，但邮件未发送成功：{result['email_status']}"
+        message = f"简报已生成，但邮件未发送成功，未加入历史简报：{result['email_status']}"
     else:
-        message = "简报已生成，但 Agent 未调用邮件发送工具"
+        message = "简报已生成，但 Agent 未调用邮件发送工具，未加入历史简报"
     return {
         "code": 0,
         "msg": message,

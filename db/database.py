@@ -29,6 +29,14 @@ def init_db():
             conn.execute(
                 "ALTER TABLE users ADD COLUMN timezone_name TEXT NOT NULL DEFAULT 'Asia/Shanghai'"
             )
+        briefing_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(briefings)")
+        }
+        if "content_type" not in briefing_columns:
+            # 历史内容来自旧逻辑，无法确认等同于实际发出的邮件正文。
+            conn.execute(
+                "ALTER TABLE briefings ADD COLUMN content_type TEXT NOT NULL DEFAULT 'legacy'"
+            )
         conn.execute(
             """
             DELETE FROM news_cache
@@ -155,20 +163,22 @@ def save_briefing(
     content: str,
     news_count: int,
     briefing_date: str | None = None,
+    content_type: str = "sent_email",
 ) -> int:
     today = briefing_date or datetime.now().strftime("%Y-%m-%d")
     conn = get_conn()
     conn.execute(
         """
-        INSERT INTO briefings (user_id, date, title, content, news_count)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO briefings (user_id, date, title, content, news_count, content_type)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, date) DO UPDATE SET
             title = excluded.title,
             content = excluded.content,
             news_count = excluded.news_count,
+            content_type = excluded.content_type,
             created_at = CURRENT_TIMESTAMP
         """,
-        (user_id, today, title, content, news_count),
+        (user_id, today, title, content, news_count, content_type),
     )
     conn.commit()
     row = conn.execute(
@@ -182,7 +192,7 @@ def save_briefing(
 def get_briefings(user_id: int) -> list:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT * FROM briefings WHERE user_id = ? ORDER BY created_at DESC",
+        "SELECT * FROM briefings WHERE user_id = ? AND content_type = 'sent_email' ORDER BY created_at DESC",
         (user_id,),
     ).fetchall()
     conn.close()

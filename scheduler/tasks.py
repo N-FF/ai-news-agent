@@ -26,18 +26,19 @@ def daily_job(now: datetime | None = None):
         try:
             subs = db.get_subscriptions(user["id"])
             result = generate_daily_briefing_for_user(user, subs)
-            db.save_briefing(
-                user_id=user["id"],
-                title=f"今日AI新闻简报",
-                content=result["final_output"],
-                news_count=0,
-                briefing_date=user_now.strftime("%Y-%m-%d"),
-            )
             if result["email_sent"]:
+                # 历史简报的正文与成功发出的邮件正文保持一致。
+                db.save_briefing(
+                    user_id=user["id"],
+                    title="今日AI新闻简报",
+                    content=result["email_body"],
+                    news_count=0,
+                    briefing_date=user_now.strftime("%Y-%m-%d"),
+                )
                 print(f"  -> 用户 {user['name']} 简报已生成并发送")
             else:
                 print(
-                    f"  -> 用户 {user['name']} 简报已生成，但邮件未确认发送成功："
+                    f"  -> 用户 {user['name']} 未收到邮件，本次不写入历史简报："
                     f"{result['email_status']}"
                 )
         except Exception as e:

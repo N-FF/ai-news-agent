@@ -44,6 +44,7 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
     email_attempted = False
     email_sent = False
     email_status = "Agent 未调用邮件发送工具"
+    email_body = ""
 
     for step in range(max_steps):
         # 调 LLM，带上工具列表
@@ -67,6 +68,7 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
                 "email_attempted": email_attempted,
                 "email_sent": email_sent,
                 "email_status": email_status,
+                "email_body": email_body,
             }
 
         # 依次执行 LLM 要求的每个工具调用
@@ -85,6 +87,7 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
                 email_status = result
                 if result.startswith("邮件已发送至 "):
                     email_sent = True
+                    email_body = tool_args.get("body", "")
             steps.append({"tool": tool_name, "args": tool_args, "result_preview": result[:300]})
 
             # 把工具结果作为 tool 角色消息塞回上下文
@@ -103,6 +106,7 @@ def run_agent(user_query: str, max_steps: int = 15) -> dict:
         "email_attempted": email_attempted,
         "email_sent": email_sent,
         "email_status": email_status,
+        "email_body": email_body,
     }
 
 

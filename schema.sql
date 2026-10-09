@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS briefings (
     title TEXT,
     content TEXT NOT NULL,
     news_count INTEGER DEFAULT 0,
+    content_type TEXT NOT NULL DEFAULT 'legacy',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
