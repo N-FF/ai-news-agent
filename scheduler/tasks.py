@@ -1,6 +1,7 @@
 """APScheduler 定时任务：每天定点为所有用户生成简报"""
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import config
 import db.database as db
 from agent.loop import generate_daily_briefing_for_user
@@ -9,15 +10,19 @@ _scheduler = None
 
 
 def daily_job(now: datetime | None = None):
-    """每分钟检查一次，为当前时间设置了推送且有订阅的用户生成简报。"""
-    now = now or datetime.now()
-    send_time = now.strftime("%H:%M")
-    users = db.get_users_scheduled_for_time(send_time)
-    if not users:
+    """每分钟按每位用户的时区检查推送时间。"""
+    now = now or datetime.now().astimezone()
+    users = db.get_users_with_subscriptions()
+    due_users = []
+    for user in users:
+        user_now = now.astimezone(ZoneInfo(user["timezone_name"]))
+        if user["daily_send_time"] == user_now.strftime("%H:%M"):
+            due_users.append((user, user_now))
+    if not due_users:
         return
 
-    print(f"[{now:%Y-%m-%d %H:%M:%S}] 到达推送时间 {send_time}，开始处理 {len(users)} 位用户...")
-    for user in users:
+    print(f"[{now:%Y-%m-%d %H:%M:%S}] 到达用户推送时间，开始处理 {len(due_users)} 位用户...")
+    for user, user_now in due_users:
         try:
             subs = db.get_subscriptions(user["id"])
             result = generate_daily_briefing_for_user(user, subs)
@@ -26,6 +31,7 @@ def daily_job(now: datetime | None = None):
                 title=f"今日AI新闻简报",
                 content=result["final_output"],
                 news_count=0,
+                briefing_date=user_now.strftime("%Y-%m-%d"),
             )
             if result["email_sent"]:
                 print(f"  -> 用户 {user['name']} 简报已生成并发送")
@@ -36,6 +42,12 @@ def daily_job(now: datetime | None = None):
                 )
         except Exception as e:
             print(f"  -> 用户 {user['name']} 生成失败: {e}")
+
+
+def cleanup_news_cache_job():
+    removed = db.cleanup_old_news_cache(retention_days=30)
+    if removed:
+        print(f"新闻缓存清理完成：删除 {removed} 条超过 30 天的记录")
 
 
 def start_scheduler():
@@ -51,5 +63,14 @@ def start_scheduler():
         coalesce=True,
         max_instances=1,
     )
+    _scheduler.add_job(
+        cleanup_news_cache_job,
+        "cron",
+        hour=3,
+        minute=15,
+        id="cleanup_old_news_cache",
+        coalesce=True,
+        max_instances=1,
+    )
     _scheduler.start()
-    print("定时任务已启动：每分钟检查用户各自设置的每日推送时间（服务器本地时区）")
+    print("定时任务已启动：每分钟检查用户各自设置的推送时间及时区")

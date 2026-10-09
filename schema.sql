@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     daily_send_time TEXT NOT NULL DEFAULT '09:00',
+    timezone_name TEXT NOT NULL DEFAULT 'Asia/Shanghai',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -42,4 +43,15 @@ CREATE TABLE IF NOT EXISTS news_cache (
     summary TEXT,
     published_at TEXT,
     fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 邮件发送尝试记录（不保存邮件正文）
+CREATE TABLE IF NOT EXISTS email_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipient TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    status TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

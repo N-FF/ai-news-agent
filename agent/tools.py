@@ -5,6 +5,7 @@ Agent 工具集：定义 8 个工具的 JSON Schema + 实际执行函数
 import os
 import subprocess
 import sqlite3
+import time
 from pathlib import Path
 import feedparser
 from tavily import TavilyClient
@@ -253,19 +254,62 @@ def _search_web_trending(query: str) -> str:
 
 def _send_email(to: str, subject: str, body: str) -> str:
     if not config.SMTP_EMAIL:
+        _record_email_delivery(to, subject, "skipped", 0, "未配置 SMTP_EMAIL")
         return "未配置 SMTP 邮件，跳过发送"
+    msg = MIMEMultipart()
+    msg["From"] = config.SMTP_EMAIL
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    max_attempts = 3
+    last_error = "未知 SMTP 错误"
+    attempts = 0
+    for attempts in range(1, max_attempts + 1):
+        try:
+            with smtplib.SMTP_SSL(
+                config.SMTP_SERVER,
+                config.SMTP_PORT,
+                timeout=config.SMTP_TIMEOUT,
+            ) as server:
+                server.login(config.SMTP_EMAIL, config.SMTP_PASSWORD)
+                refused = server.sendmail(config.SMTP_EMAIL, to, msg.as_string())
+                if refused:
+                    raise smtplib.SMTPRecipientsRefused(refused)
+            _record_email_delivery(to, subject, "sent", attempts)
+            return f"邮件已发送至 {to}"
+        except (smtplib.SMTPAuthenticationError, smtplib.SMTPRecipientsRefused) as exc:
+            last_error = str(exc)
+            break
+        except smtplib.SMTPResponseException as exc:
+            last_error = str(exc)
+            if not 400 <= exc.smtp_code < 500:
+                break
+        except (smtplib.SMTPServerDisconnected, OSError, TimeoutError) as exc:
+            last_error = str(exc)
+        except Exception as exc:
+            last_error = str(exc)
+            break
+
+        if attempts < max_attempts:
+            time.sleep(attempts)
+
+    _record_email_delivery(to, subject, "failed", attempts, last_error)
+    return f"邮件发送失败（尝试{attempts}次）：{last_error}"
+
+
+def _record_email_delivery(
+    to: str,
+    subject: str,
+    status: str,
+    attempts: int,
+    error_message: str = "",
+) -> None:
     try:
-        msg = MIMEMultipart()
-        msg["From"] = config.SMTP_EMAIL
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain", "utf-8"))
-        with smtplib.SMTP_SSL(config.SMTP_SERVER, config.SMTP_PORT) as server:
-            server.login(config.SMTP_EMAIL, config.SMTP_PASSWORD)
-            server.sendmail(config.SMTP_EMAIL, to, msg.as_string())
-        return f"邮件已发送至 {to}"
-    except Exception as e:
-        return f"邮件发送失败：{e}"
+        db.record_email_delivery(to, subject, status, attempts, error_message)
+    except Exception as log_error:
+        # 日志落库失败不能导致已经发出的邮件被重新发送。
+        print(f"邮件发送记录写入失败：{log_error}")
 
 
 # ===========================================

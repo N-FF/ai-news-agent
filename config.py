@@ -17,6 +17,7 @@ SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.qq.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_TIMEOUT = float(os.getenv("SMTP_TIMEOUT", "15"))
 
 # 任意 Shell 命令执行有较高风险，默认关闭；仅可信本地演示环境显式开启
 ENABLE_BASH_TOOL = os.getenv("ENABLE_BASH_TOOL", "false").strip().lower() in {

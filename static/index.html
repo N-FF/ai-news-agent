@@ -44,10 +44,13 @@
         <div class="col-md-4">
           <input id="dailySendTime" type="time" class="form-control" value="09:00">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
+          <input id="timezoneName" type="text" class="form-control" placeholder="时区，例如 Asia/Shanghai">
+        </div>
+        <div class="col-md-2">
           <button class="btn btn-outline-primary w-100" onclick="saveSchedule()">保存推送时间</button>
         </div>
-        <div class="col-md-5 text-muted small">按服务器本地时间执行；每天为有订阅的话题生成并发送简报。</div>
+        <div class="col-md-2 text-muted small">按所选时区执行</div>
       </div>
       <div id="scheduleInfo" class="mt-2" role="status"></div>
     </div>
@@ -85,7 +88,9 @@ async function createUser() {
   const name = document.getElementById("name").value.trim();
   const email = document.getElementById("email").value.trim();
   if (!name || !email) return alert("请填写名字和邮箱");
-  const r = await api("/api/users", "POST", {name, email});
+  const timezone_name = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
+  const r = await api("/api/users", "POST", {name, email, timezone_name});
+  if (r.code !== 0) return alert(r.msg);
   currentUser = r.user;
   document.getElementById("userInfo").innerText = `已登录：${currentUser.name} (${currentUser.email})`;
   loadSubs();
@@ -106,13 +111,24 @@ async function loadSubs() {
   const r = await api(`/api/users/${currentUser.email}`);
   if (r.code !== 0) return alert(r.msg);
   document.getElementById("dailySendTime").value = r.user.daily_send_time || "09:00";
+  const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
+  document.getElementById("timezoneName").value = r.user.timezone_name || detectedTimezone;
   const ul = document.getElementById("subList");
-  ul.innerHTML = "";
+  ul.replaceChildren();
   r.subscriptions.forEach(s => {
     const li = document.createElement("li");
     li.className = "list-group-item d-flex justify-content-between";
-    li.innerHTML = `<span>${s.topic} <small class="text-muted">${s.keyword||""}</small></span>
-                    <button class="btn btn-sm btn-outline-danger" onclick="delSub(${s.id})">删除</button>`;
+    const description = document.createElement("span");
+    description.append(document.createTextNode(`${s.topic} `));
+    const keyword = document.createElement("small");
+    keyword.className = "text-muted";
+    keyword.textContent = s.keyword || "";
+    description.appendChild(keyword);
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "btn btn-sm btn-outline-danger";
+    deleteButton.textContent = "删除";
+    deleteButton.addEventListener("click", () => delSub(s.id));
+    li.append(description, deleteButton);
     ul.appendChild(li);
   });
 }
@@ -120,7 +136,8 @@ async function loadSubs() {
 async function saveSchedule() {
   if (!currentUser) return alert("请先注册/登录");
   const daily_send_time = document.getElementById("dailySendTime").value;
-  const r = await api(`/api/users/${encodeURIComponent(currentUser.email)}/schedule`, "PUT", {daily_send_time});
+  const timezone_name = document.getElementById("timezoneName").value.trim();
+  const r = await api(`/api/users/${encodeURIComponent(currentUser.email)}/schedule`, "PUT", {daily_send_time, timezone_name});
   const info = document.getElementById("scheduleInfo");
   info.className = r.code === 0 ? "mt-2 text-success" : "mt-2 text-danger";
   info.textContent = r.msg;
@@ -133,9 +150,12 @@ async function delSub(id) {
 
 async function triggerNow() {
   if (!currentUser) return alert("请先注册/登录");
-  document.getElementById("result").innerHTML = "<div class='text-info'>Agent 正在工作中，请耐心等待 1-2 分钟...</div>";
-  const r = await api("/api/trigger", "POST", {user_email: currentUser.email});
   const result = document.getElementById("result");
+  const loading = document.createElement("div");
+  loading.className = "text-info";
+  loading.textContent = "Agent 正在工作中，请耐心等待 1-2 分钟...";
+  result.replaceChildren(loading);
+  const r = await api("/api/trigger", "POST", {user_email: currentUser.email});
   const status = document.createElement("div");
   status.className = r.email_sent ? "text-success" : "text-warning";
   status.textContent = r.msg;
@@ -149,9 +169,16 @@ async function loadHistory() {
   if (!currentUser) return alert("请先注册/登录");
   const r = await api(`/api/briefings/${currentUser.email}`);
   const div = document.getElementById("historyList");
-  div.innerHTML = "";
+  div.replaceChildren();
   r.briefings.forEach(b => {
-    div.innerHTML += `<div class="border p-2 mb-2"><b>${b.date}</b><pre>${b.content.slice(0,500)}...</pre></div>`;
+    const item = document.createElement("div");
+    item.className = "border p-2 mb-2";
+    const date = document.createElement("b");
+    date.textContent = b.date;
+    const content = document.createElement("pre");
+    content.textContent = `${b.content.slice(0, 500)}...`;
+    item.append(date, content);
+    div.appendChild(item);
   });
 }
 </script>
