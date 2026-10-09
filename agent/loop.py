@@ -5,7 +5,8 @@ ReAct / Function Calling 循环核心：
 """
 import json
 from agent.llm import chat
-from agent.tools import TOOLS_SCHEMA, execute_tool
+from agent.tool_schemas import TOOLS_SCHEMA
+from agent.tools import execute_tool
 
 
 SYSTEM_PROMPT = """你是一个「每日AI新闻助手 Agent」。
