@@ -13,6 +13,10 @@ venv/
 data/*.db
 data/*.sqlite
 
+# Agent 运行时生成的新闻缓存与简报归档
+/cache/
+/archive/
+
 # 编辑器
 .vscode/
 .idea/
