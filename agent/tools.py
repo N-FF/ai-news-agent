@@ -12,6 +12,7 @@ from email.mime.multipart import MIMEMultipart
 
 import config
 import db.database as db
+from agent.tool_schemas import TOOL_PARAMETERS_BY_NAME
 # ===========================================
 # 工具的实际执行函数
 # ===========================================
@@ -206,6 +207,15 @@ def execute_tool(
     func = TOOL_DISPATCH.get(name)
     if func is None:
         return f"错误：未知工具 {name}"
+    if not isinstance(arguments, dict):
+        return f"工具 {name} 参数格式错误：需要 JSON 对象，请重新调用。"
+
+    parameter_schema = TOOL_PARAMETERS_BY_NAME.get(name, {})
+    missing = [key for key in parameter_schema.get("required", []) if key not in arguments]
+    if missing:
+        missing_list = "、".join(missing)
+        return f"工具 {name} 缺少必填参数：{missing_list}。请补齐参数后重新调用。"
+
     try:
         return func(**arguments)
     except Exception as e:

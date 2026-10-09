@@ -114,3 +114,7 @@ class SendEmailSchema(ToolSchema):
 
 # The base class auto-registers subclasses; adding a tool only requires one class.
 TOOLS_SCHEMA = ToolSchema.all_schemas()
+TOOL_PARAMETERS_BY_NAME = {
+    schema["function"]["name"]: schema["function"]["parameters"]
+    for schema in TOOLS_SCHEMA
+}

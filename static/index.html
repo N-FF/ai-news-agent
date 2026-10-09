@@ -153,26 +153,69 @@ async function delSub(id) {
 async function triggerNow() {
   if (!currentUser) return alert("请先注册/登录");
   const result = document.getElementById("result");
-  const loading = document.createElement("div");
-  loading.className = "text-info";
-  loading.textContent = "Agent 正在工作中，请耐心等待 1-2 分钟...";
-  result.replaceChildren(loading);
-  let r;
-  try { r = await api("/api/trigger", "POST", {user_email: currentUser.email}); }
-  catch (error) {
+  const progress = document.createElement("pre");
+  progress.className = "bg-dark text-light p-3 rounded";
+  progress.style.maxHeight = "360px";
+  progress.style.overflowY = "auto";
+  progress.setAttribute("aria-live", "polite");
+  result.replaceChildren(progress);
+
+  const appendProgress = message => {
+    progress.textContent += `${message}\n`;
+    progress.scrollTop = progress.scrollHeight;
+  };
+
+  try {
+    const response = await fetch("/api/trigger/stream", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({user_email: currentUser.email}),
+    });
+    if (!response.ok) throw new Error(`请求失败（HTTP ${response.status}）`);
+    if (!response.body) throw new Error("浏览器不支持读取实时进度流");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult = null;
+    let streamError = null;
+
+    const handleFrame = frame => {
+      let eventName = "message";
+      const dataLines = [];
+      for (const line of frame.split(/\r?\n/)) {
+        if (line.startsWith("event:")) eventName = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      if (!dataLines.length) return;
+      const payload = JSON.parse(dataLines.join("\n"));
+      if (eventName === "progress") appendProgress(payload.message);
+      else if (eventName === "done") finalResult = payload;
+      else if (eventName === "error") streamError = payload.message;
+    };
+
+    while (true) {
+      const {value, done} = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), {stream: !done});
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop();
+      frames.forEach(handleFrame);
+      if (done) break;
+    }
+    if (buffer.trim()) handleFrame(buffer);
+    if (streamError) throw new Error(streamError);
+    if (!finalResult) throw new Error("生成连接已结束，但没有收到最终结果");
+
     const status = document.createElement("div");
-    status.className = "text-danger";
-    status.textContent = error.message;
-    result.replaceChildren(status);
-    return;
+    status.className = finalResult.email_sent ? "text-success" : "text-warning";
+    status.textContent = finalResult.msg;
+    const output = document.createElement("pre");
+    output.className = "bg-light p-3 mt-2 text-wrap";
+    output.textContent = finalResult.output || "";
+    result.append(status, output);
+  } catch (error) {
+    appendProgress(`发生错误：${error.message}`);
   }
-  const status = document.createElement("div");
-  status.className = r.email_sent ? "text-success" : "text-warning";
-  status.textContent = r.msg;
-  const output = document.createElement("pre");
-  output.className = "bg-light p-3";
-  output.textContent = r.output || "";
-  result.replaceChildren(status, output);
 }
 
 async function loadHistory() {

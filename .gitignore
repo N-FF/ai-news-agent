@@ -16,6 +16,7 @@ data/*.sqlite
 # Agent 运行时生成的新闻缓存与简报归档
 /cache/
 /archive/
+/daily_briefs/
 
 # 编辑器
 .vscode/

@@ -1,8 +1,12 @@
 """FastAPI 路由：用户注册、订阅偏好、历史简报、手动触发"""
+import json
+import queue
+import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+from starlette.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import db.database as db
 from agent.loop import generate_daily_briefing_for_user
@@ -134,3 +138,79 @@ def trigger_now(body: TriggerRequest):
         "email_sent": result["email_sent"],
         "email_status": result["email_status"],
     }
+
+
+@router.post("/api/trigger/stream")
+def trigger_now_stream(body: TriggerRequest):
+    """Stream Agent progress events, then send the final result as an SSE event."""
+    user = db.get_user_by_email(body.user_email)
+    if not user:
+        return StreamingResponse(
+            _single_sse_event("error", {"message": "用户不存在"}),
+            media_type="text/event-stream",
+        )
+    subscriptions = db.get_subscriptions(user["id"])
+    if not subscriptions:
+        return StreamingResponse(
+            _single_sse_event("error", {"message": "请先设置订阅偏好"}),
+            media_type="text/event-stream",
+        )
+
+    events: queue.Queue[tuple[str, dict] | None] = queue.Queue()
+
+    def publish_progress(message: str) -> None:
+        events.put(("progress", {"message": message}))
+
+    def run_and_publish() -> None:
+        try:
+            result = generate_daily_briefing_for_user(
+                user,
+                subscriptions,
+                progress_callback=publish_progress,
+            )
+            if result["email_sent"]:
+                db.save_briefing(
+                    user_id=user["id"],
+                    title="今日AI新闻简报",
+                    content=result["email_body"],
+                    news_count=0,
+                    briefing_date=datetime.now(
+                        ZoneInfo(user["timezone_name"])
+                    ).strftime("%Y-%m-%d"),
+                )
+                message = "简报已生成并成功发送"
+            elif result["email_attempted"]:
+                message = f"简报已生成，但邮件未发送成功，未加入历史简报：{result['email_status']}"
+            else:
+                message = "简报已生成，但 Agent 未调用邮件发送工具，未加入历史简报"
+            events.put(("done", {
+                "code": 0,
+                "msg": message,
+                "output": result["final_output"],
+                "email_sent": result["email_sent"],
+                "email_status": result["email_status"],
+            }))
+        except Exception as exc:
+            events.put(("error", {"message": f"简报生成失败：{exc}"}))
+        finally:
+            events.put(None)
+
+    def stream_events():
+        worker = threading.Thread(target=run_and_publish, daemon=True)
+        worker.start()
+        while True:
+            event = events.get()
+            if event is None:
+                break
+            event_name, payload = event
+            yield f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        stream_events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _single_sse_event(event_name: str, payload: dict):
+    yield f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"

@@ -4,6 +4,7 @@ ReAct / Function Calling 循环核心：
 不是硬编码流水线，是 LLM 自主决策。
 """
 import json
+from typing import Callable
 from agent.llm import chat
 from agent.tool_schemas import TOOLS_SCHEMA
 from agent.tools import execute_tool
@@ -32,7 +33,8 @@ SYSTEM_PROMPT = """你是一个「每日AI新闻助手 Agent」。
 
 def run_agent(
     user_query: str,
-    max_steps: int = 15,
+    max_steps: int = 30,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> dict:
     """
     运行 Agent 循环。
@@ -50,7 +52,18 @@ def run_agent(
     email_status = "Agent 未调用邮件发送工具"
     email_body = ""
 
+    def report(message: str) -> None:
+        if progress_callback:
+            try:
+                progress_callback(message)
+            except Exception:
+                # UI 连接中断不应破坏 Agent 的执行或邮件发送。
+                pass
+
+    report("Agent 已启动，正在分析订阅偏好并规划工具调用。")
+
     for step in range(max_steps):
+        report(f"第 {step + 1}/{max_steps} 轮：正在请求模型决定下一步操作……")
         # 调 LLM，带上工具列表
         ai_message = chat(messages, tools=TOOLS_SCHEMA, temperature=0.5)
 
@@ -65,6 +78,7 @@ def run_agent(
 
         # 如果 LLM 没有要求调用工具，说明它认为任务完成了
         if not ai_message.tool_calls:
+            report("模型已决定结束工具调用，简报流程完成。")
             return {
                 "final_output": ai_message.content or "",
                 "steps": steps,
@@ -80,10 +94,29 @@ def run_agent(
             tool_name = tool_call.function.name
             try:
                 tool_args = json.loads(tool_call.function.arguments)
-            except json.JSONDecodeError:
+                if not isinstance(tool_args, dict):
+                    raise ValueError("工具参数顶层必须是 JSON 对象")
+            except (json.JSONDecodeError, ValueError) as exc:
                 tool_args = {}
+                result = f"工具参数解析失败：{exc}。请使用 JSON 对象重新调用工具，并填写 Schema 中的必填参数。"
+                tool_calls_count += 1
+                steps.append({"tool": tool_name, "args": tool_args, "result_preview": result[:300]})
+                report(f"[Step {step+1}] 工具 {tool_name} 参数无效：{exc}")
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": tool_name,
+                    "content": result,
+                })
+                continue
 
-            print(f"[Step {step+1}] 调用工具: {tool_name} | 参数: {tool_args}")
+            display_args = {
+                key: (f"<已省略，共 {len(value)} 字符>" if key == "body" and isinstance(value, str) else value)
+                for key, value in tool_args.items()
+            }
+            tool_start = f"[Step {step+1}] 调用工具: {tool_name} | 参数: {display_args}"
+            print(tool_start)
+            report(tool_start)
             result = execute_tool(tool_name, tool_args)
             tool_calls_count += 1
             if tool_name == "send_email":
@@ -92,6 +125,10 @@ def run_agent(
                 if result.startswith("邮件已发送至 "):
                     email_sent = True
                     email_body = tool_args.get("body", "")
+            result_preview = result[:300]
+            tool_result = f"[Step {step+1}] 工具 {tool_name} 返回：{result_preview}"
+            print(tool_result)
+            report(tool_result)
             steps.append({"tool": tool_name, "args": tool_args, "result_preview": result[:300]})
 
             # 把工具结果作为 tool 角色消息塞回上下文
@@ -103,6 +140,7 @@ def run_agent(
             })
 
     # 超过最大步数还没停，强制退出
+    report(f"已达到最大步数限制（{max_steps} 轮），Agent 停止。")
     return {
         "final_output": "（达到最大步数限制，任务强制结束）",
         "steps": steps,
@@ -114,7 +152,11 @@ def run_agent(
     }
 
 
-def generate_daily_briefing_for_user(user: dict, subscriptions: list) -> dict:
+def generate_daily_briefing_for_user(
+    user: dict,
+    subscriptions: list,
+    progress_callback: Callable[[str], None] | None = None,
+) -> dict:
     """
     为某个用户生成今日简报。
     user: {id, name, email}
@@ -135,5 +177,5 @@ def generate_daily_briefing_for_user(user: dict, subscriptions: list) -> dict:
 4. 生成简报后写入文件存档
 5. 最后发送邮件到 {user['email']}
 """
-    result = run_agent(query)
+    result = run_agent(query, progress_callback=progress_callback)
     return result
